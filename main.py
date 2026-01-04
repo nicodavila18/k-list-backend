@@ -16,18 +16,33 @@ import requests
 # --- 1. CONFIGURACIÓN ---
 load_dotenv()
 
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "admin")
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME", "klist_db")
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
-
-SECRET_KEY = "MI_SECRETO_SUPER_SECRETO_CAMBIALO" 
+# Seguridad: Leemos la clave del entorno. Si no existe, usa la insegura por defecto (solo para local).
+SECRET_KEY = os.getenv("SECRET_KEY", "secreto_por_defecto_inseguro")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30000 
 
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+
+# 👇 LÓGICA HÍBRIDA DE BASE DE DATOS (LA MAGIA 🎩)
+# 1. Primero intentamos buscar la URL completa (Esto es lo que usa Render/Neon)
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# 2. Si está vacía (significa que estás en tu PC), la construimos por partes como antes
+if not DATABASE_URL:
+    DB_USER = os.getenv("DB_USER", "postgres")
+    DB_PASSWORD = os.getenv("DB_PASSWORD", "admin")
+    DB_HOST = os.getenv("DB_HOST", "localhost")
+    DB_PORT = os.getenv("DB_PORT", "5432")
+    DB_NAME = os.getenv("DB_NAME", "klist_db")
+    DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+# 🛠️ CORRECCIÓN DE COMPATIBILIDAD
+# Neon devuelve "postgres://", pero SQLAlchemy prefiere "postgresql://"
+# Este código lo arregla automáticamente al vuelo.
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+# Creamos la conexión con la URL final (sea la de tu PC o la de Neon)
 engine = create_engine(DATABASE_URL)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
