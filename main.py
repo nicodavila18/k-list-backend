@@ -369,6 +369,21 @@ def obtener_recomendaciones_ia(current_user: Usuario = Depends(get_current_user)
         No incluyas texto adicional, ni saludos, ni formato Markdown (```json). Solo el arreglo puro.
         """
 
+        # 3. El "Prompt Engineering" (Las instrucciones para la IA)
+        prompt = f"""
+        Actúa como un experto recomendador de series y doramas. 
+        Un usuario ha visto y le gustan las siguientes series: {series_texto}.
+        ... (tu texto del prompt) ...
+        """
+
+        # 👇 --- CÓDIGO ESPÍA NUEVO --- 👇
+        print("🔍 --- PREGUNTANDO MODELOS A GOOGLE --- 🔍")
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                print(f"Modelo permitido: {m.name}")
+        print("🔍 ------------------------------------ 🔍")
+        # 👆 -------------------------- 👆
+
         try:
             # 4. Llamamos a Gemini
             modelo = genai.GenerativeModel('gemini-1.5-flash-latest')
