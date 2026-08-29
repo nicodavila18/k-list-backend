@@ -371,7 +371,7 @@ def obtener_recomendaciones_ia(current_user: Usuario = Depends(get_current_user)
 
         try:
             # 4. Llamamos a Gemini
-            modelo = genai.GenerativeModel('gemini-1.5-flash')
+            modelo = genai.GenerativeModel('gemini-1.5-flash-latest')
             respuesta = modelo.generate_content(prompt)
             
             # 5. Limpiamos la respuesta (por si la IA mete formato Markdown por error) y la convertimos a JSON
