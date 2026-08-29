@@ -12,9 +12,14 @@ from datetime import datetime, timedelta
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 import requests
+import google.generativeai as genai
+import json
 
 # --- 1. CONFIGURACIÓN ---
 load_dotenv()
+
+# Configurar la API de Gemini
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 # Seguridad: Leemos la clave del entorno. Si no existe, usa la insegura por defecto (solo para local).
 SECRET_KEY = os.getenv("SECRET_KEY", "secreto_por_defecto_inseguro")
@@ -123,6 +128,11 @@ class Token(BaseModel):
     
 class UsuarioUpdate(BaseModel):
     nombre: str
+
+# Nuevo modelo Pydantic para estructurar la respuesta de la IA
+class Recomendacion(BaseModel):
+    titulo: str
+    razon: str
 
 # --- 3. FUNCIONES DE SEGURIDAD ---
 
@@ -329,3 +339,47 @@ def borrar_actor_por_tmdb(tmdb_id: int, current_user: Usuario = Depends(get_curr
         session.delete(a)
         session.commit()
         return {"mensaje": "Eliminado"}
+
+@app.get("/recomendaciones", response_model=List[Recomendacion])
+def obtener_recomendaciones_ia(current_user: Usuario = Depends(get_current_user)):
+    with Session(engine) as session:
+        # 1. Obtenemos las series del usuario que estén activas
+        series_db = session.exec(select(Serie).where(Serie.usuario_id == current_user.id).where(Serie.activa == True)).all()
+        
+        if not series_db:
+             raise HTTPException(status_code=400, detail="Necesitas agregar algunas series primero para que la IA te conozca.")
+
+        # 2. Extraemos solo los nombres. 
+        # Si el usuario tiene guardadas obras como "Shopping King Louie", "My First First Love" o "So Not Worth It", 
+        # esta lista se llenará con esos títulos exactos para enviarlos de contexto.
+        nombres_series = [serie.titulo for serie in series_db]
+        series_texto = ", ".join(nombres_series)
+
+        # 3. El "Prompt Engineering" (Las instrucciones para la IA)
+        prompt = f"""
+        Actúa como un experto recomendador de series y doramas. 
+        Un usuario ha visto y le gustan las siguientes series: {series_texto}.
+        
+        Basado estrictamente en esos gustos, recomiéndale 3 series nuevas que NO estén en esa lista.
+        Tu respuesta DEBE ser ÚNICAMENTE un arreglo JSON válido con esta estructura exacta:
+        [
+            {{"titulo": "Nombre de la Serie", "razon": "Breve explicación de por qué le gustará"}},
+            ...
+        ]
+        No incluyas texto adicional, ni saludos, ni formato Markdown (```json). Solo el arreglo puro.
+        """
+
+        try:
+            # 4. Llamamos a Gemini
+            modelo = genai.GenerativeModel('gemini-1.5-flash')
+            respuesta = modelo.generate_content(prompt)
+            
+            # 5. Limpiamos la respuesta (por si la IA mete formato Markdown por error) y la convertimos a JSON
+            texto_json = respuesta.text.replace("```json", "").replace("```", "").strip()
+            recomendaciones = json.loads(texto_json)
+            
+            return recomendaciones
+            
+        except Exception as e:
+            print(f"Error con la IA: {e}")
+            raise HTTPException(status_code=500, detail="La IA está descansando, intenta en un momento.")
